@@ -5,7 +5,6 @@
 
 import sys
 import os
-import time
 import platform
 import datetime as dt
 from stat import *  # ST_SIZE etc
@@ -14,22 +13,12 @@ import re
 import csv
 
 
-def creation_date(path_to_file):
-    """
-    Try to get the date that a file was created, falling back to when it was
-    last modified if that isn't possible.
-    See http://stackoverflow.com/a/39501288/1709587 for explanation.
-    """
+def modification_date(path_to_file):
     if platform.system() != 'Windows':
         stat = os.stat(path_to_file)
-        try:
-            return dt.datetime.fromtimestamp(stat.st_birthtime).strftime('%d %m %Y, %H:%M')
-        except AttributeError:
-            # We're probably on Linux. No easy way to get creation dates here,
-            # so we'll settle for when its content was last modified.
-            return time.ctime(stat.st_mtime)
+        return dt.datetime.fromtimestamp(stat.st_mtime).strftime('%d %m %Y, %H:%M')
     else:
-        return dt.datetime.fromtimestamp(os.path.getctime(path_to_file)).strftime('%d-%m-%Y, %H:%M')
+        return dt.datetime.fromtimestamp(os.path.getmtime(path_to_file)).strftime('%d-%m-%Y, %H:%M')
 
 
 def add_timestamp(file):
@@ -98,7 +87,7 @@ class FileList:
                         duration_string = "%s:%s:%s" % (
                             self.duration['hours'], self.duration['minutes'], self.duration['seconds'])
 
-                        creation_string = creation_date(self.absolutePath)
+                        creation_string = modification_date(self.absolutePath)
 
                         file_size = "{:.2f}".format(self.st[ST_SIZE] / (1024*1024))
                         # metadata format : file_num - fullpath - filename - date - filelength - filesize
