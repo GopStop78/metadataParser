@@ -32,6 +32,25 @@ def creation_date(path_to_file):
         return dt.datetime.fromtimestamp(os.path.getctime(path_to_file)).strftime('%d-%m-%Y, %H:%M')
 
 
+def add_timestamp(file):
+    filename, file_extension = os.path.splitext(file)
+    cur_datetime = dt.datetime.now().strftime("%m-%d-%Y_%H-%M-%S")
+    return filename + '_' + cur_datetime + file_extension
+
+
+def filelength(file_path):
+    process = subprocess.Popen(['ffmpeg', '-i', file_path], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    stdout, stderr = process.communicate()
+    matches = re.search(r'Duration:\s(?P<hours>\d+?):(?P<minutes>\d+?):(?P<seconds>\d+\.\d+?),',
+                        stdout.decode('utf-8'), re.DOTALL).groupdict()
+    # print process.pid
+    process.kill()
+    duration = {'hours': matches['hours'], 'minutes': matches['minutes'], 'seconds': matches['seconds'],
+                'total_in_sec': float(matches['seconds']) + 60 * float(matches['minutes']) + 3600 * float(
+                    matches['hours'])}
+    return duration
+
+
 class FileList:
     def __init__(self, directory_path):
         self.directoryPath = directory_path     # FileList object will hold directory path that is being searched
@@ -72,47 +91,42 @@ class FileList:
                         except Exception as inst:
                             print(type(inst))  # the exception instance
                             print(inst)  # __str__ allows args to be printed directly
-                            print("Probably trying to get filelength of a file that isn't a video file")
-                        else:
-                            # There was no error reading movie file so we can update metadata
-                            duration_string = "%s:%s:%s" % (
-                                self.duration['hours'], self.duration['minutes'], self.duration['seconds'])
+                            print("Failed to get filelength of a file that isn't a video file")
+                            self.duration = {'hours': 0, 'minutes': 0, 'seconds': 0}
 
-                            creation_string = creation_date(self.absolutePath)
+                        # There was no error reading movie file so we can update metadata
+                        duration_string = "%s:%s:%s" % (
+                            self.duration['hours'], self.duration['minutes'], self.duration['seconds'])
 
-                            file_size = "{:.2f}".format(self.st[ST_SIZE] / (1024*1024))
-                            # metadata format : file_num - fullpath - filename - date - filelength - filesize
-                            self.metadata = [index, self.absolutePath, file,
-                                             creation_string, duration_string, file_size]
-                            index += 1
-                            self.filelist.append(self.metadata)
-                            print(self.metadata)
+                        creation_string = creation_date(self.absolutePath)
+
+                        file_size = "{:.2f}".format(self.st[ST_SIZE] / (1024*1024))
+                        # metadata format : file_num - fullpath - filename - date - filelength - filesize
+                        self.metadata = [index, self.absolutePath, file,
+                                         creation_string, duration_string, file_size]
+                        index += 1
+                        self.filelist.append(self.metadata)
+                        print(self.metadata)
 
     def data_output(self, filelist, out_name):
-        self.writer = csv.writer(open(out_name, 'w', encoding='utf-8', newline=''))
+        try:
+            self.writer = csv.writer(open(out_name, 'w', encoding='utf-8', newline=''))
+        except PermissionError as inst:
+            print(type(inst))  # the exception instance
+            print(inst)  # __str__ allows args to be printed directly
+            new_name = add_timestamp(out_name)
+
+            self.writer = csv.writer(open(new_name, 'w', encoding='utf-8', newline=''))
+
         self.writer.writerow(['N', 'Path', 'Name', 'Date', 'Duration, hh:mm:ss', 'Size, Mb'])
 
         for line in filelist:  # filelist contains dictionaries with metadata about movie file
             self.writer.writerow(line)  # write each entry a single line, separate them with comma
 
 
-def filelength(file_path):
-    process = subprocess.Popen(['ffmpeg', '-i', file_path], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    stdout, stderr = process.communicate()
-    matches = re.search(r'Duration:\s(?P<hours>\d+?):(?P<minutes>\d+?):(?P<seconds>\d+\.\d+?),',
-                        stdout.decode('utf-8'), re.DOTALL).groupdict()
-
-    # print process.pid
-    process.kill()
-    duration = {'hours': matches['hours'], 'minutes': matches['minutes'], 'seconds': matches['seconds'],
-                'total_in_sec': float(matches['seconds']) + 60 * float(matches['minutes']) + 3600 * float(
-                    matches['hours'])}
-    return duration
-
-
 if __name__ == '__main__':
-    path_to_files = 'd:\\TEST_VIDS'
-    path_to_output_files = 'metadata.csv'
+    path_to_files = 'd:\\Work\\Documents\\Atlantique\\Dataset_IR_TV\\'
+    path_to_output_files = add_timestamp('metadata.csv')
 
     print('This is a video file metadata parsing script\n')
 
@@ -129,6 +143,8 @@ if __name__ == '__main__':
     file_list = FileList(path_to_files)
     file_list.scan_directory(['mp4', 'mkv', 'flv', 'wmv', 'avi', 'mpg', 'mpeg', 'mpeg4'])
 
-    print('\nFile list ready. Writing metadata to', os.path.dirname(os.path.realpath(__file__)) + '\\' + path_to_output_files)
+    print('\nFile list ready. Writing metadata to',
+          os.path.dirname(os.path.realpath(__file__)) + '\\' + path_to_output_files)
+
     file_list.data_output(file_list.filelist, path_to_output_files)
     print('\nDone. Goodbye!')
